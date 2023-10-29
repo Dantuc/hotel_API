@@ -1,67 +1,34 @@
 from flask_restful import Resource, reqparse
 from models.hotel import HotelModel
 from flask_jwt_extended import jwt_required
-import sqlite3
-import os.path
-
-def normalize_path_params(city=None, stars_min=0, daily_min=0, daily_max=100000, limit=50, offset=0, **data):
-
-    if city:
-        return {
-            'city': city,
-            'stars_min': stars_min,
-            'daily_min': daily_min,
-            'daily_max': daily_max,
-            'limit': limit,
-            'offset': offset
-        }
-    return {
-            'stars_min': stars_min,
-            'daily_min': daily_min,
-            'daily_max': daily_max,
-            'limit': limit,
-            'offset': offset
-        }
 
 path_params = reqparse.RequestParser()
-path_params.add_argument('city', type=str, location='json')
-path_params.add_argument('stars_min', type=float, location='json')
-path_params.add_argument('daily_min', type=float, location='json')
-path_params.add_argument('daily_max', type=float, location='json')
-path_params.add_argument('limit', type=int, location='json')
-path_params.add_argument('offset', type=int, location='json')
+path_params.add_argument("city",type=str, default=None, location="args")
+path_params.add_argument("stars_min",type=float, default=0, location="args")
+path_params.add_argument("daily_min",type=float, default=0, location="args")
+path_params.add_argument("daily_max",type=float, default=99999999999, location="args")
+path_params.add_argument("offset",type=float, default=1, location="args")
+path_params.add_argument("limit",type=float, default=100, location="args")
 
 class Hotels(Resource):
     def get(self):
-
-        connection = sqlite3.connect('C:\Formacao_dev\hotel_API\hotel_API\instance\database.db')
-        cursor = connection.cursor()
-
-
-        data = path_params.parse_args()
-        valid_data = {key:data[key] for key in data if data[key] is not None}
-        params = normalize_path_params(**valid_data)
         
-        if not params.get('city'):
-            query = "SELECT * FROM hotels WHERE stars > ? and daily < ? and daily > ? LIMIT ? OFFSET ?"
-            tuple_query = tuple([params[key] for key in params])
-            result = cursor.execute(query, tuple_query)
-        else: 
-            query = "SELECT * FROM hotels WHERE city = ? and stars > ? and daily < ? and daily > ? LIMIT ? OFFSET ?"
-            tuple_query = tuple([params[key] for key in params])
-            result = cursor.execute(query, tuple_query)
-
-        hotels = []
-        for line in result:
-            hotels.append({
-                'hotel_id' : line[0],
-                'name' : line[1],
-                'stars' : line[2],
-                'daily' : line[3],
-                'city' : line[4]  
-            })
-
-        return {'hotels': hotels}
+        data = path_params.parse_args()
+            
+        hotels = HotelModel.query.filter(
+                                        HotelModel.stars > data["stars_min"],
+                                        HotelModel.daily > data['daily_min'],
+                                        HotelModel.daily < data['daily_max']
+                                        ).paginate(page=data["offset"], per_page=data["limit"])
+        if data['city']:
+            hotels = HotelModel.query.filter(
+                                        HotelModel.city == data["city"],
+                                        HotelModel.stars > data["stars_min"],
+                                        HotelModel.daily > data['daily_min'],
+                                        HotelModel.daily < data['daily_max']
+                                        ).paginate(page=data["offset"], per_page=data["limit"])
+        
+        return {"hoteis": [hotel.json() for hotel in hotels]}
     
 
 class Hotel(Resource):
